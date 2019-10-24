@@ -1,0 +1,112 @@
+---
+title: "Katherine_Hanks_HW3"
+author: "Katie Hanks"
+date: "10/24/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Introduction
+
+  Association rule mining is a tool used to find patterns in data of variables occuring together that are called rules.  To determine what rules are the most valuable to a business, measurements like support, confidence, and lift are taken.  Measures of support are taken to filter out uninteresting or common knowledge rules of the business. The confidence of a rule is how certain a rule is likely to happen but uninteresting and common knowledge rules are removed from the final results.  Lastly, the lift is the most important measurement, creating levels of "interesting-ness" by determining if variables have influence on one another or if it was expected for these two variables to occur together.
+
+
+#Load the libraries to begin the analysis
+```{r}
+library(plyr)
+library(dplyr)
+##install.packages("arules")
+library(arules)
+library(arulesViz)
+library(plotly)
+```
+
+#Read in the data to be pre processed, set sig figs to 2
+##FIX B4 SUBMITTING
+```{r}
+bd<- read.csv("C:/Users/katie/Desktop/bankdata_csv_all.csv")
+options(digits = 2)
+```
+
+
+About the Data
+
+  The bank data was originally stored in a CSV file that was read into RStudio and to be pre-processed before creating rules.  First, the ID field was removed from the column as it did not constitute as an attribute that would be useful for rules.  Then, the numeric fields like 'age' and 'income' had to be discretized so that it could be used in the apriori algorithm.  Age was put into seven age ranges of child (0-9), teens(10-19), twenties(20-29),thirties(30-39), fourties(40-49), fifties(50-59), and old(60+).  Next, the data for the income was put into three separate ranges by taking the maximum income and subtracting the minimum income and dividing into three categories: $5,010-$24,400, $24,401-$43,800, and $43,801-$61,300.
+#Preprocess the data
+```{r}
+bd <- bd[,-1]
+bd$age<- discretizeDF(bd$age)
+bd$age <- cut(bd$age, breaks = c(0,10,20,30,40,50,60,Inf),labels=c("child","teens","twenties","thirties","fourties","fifties","old"))
+
+
+min_income <- min(bd$income)
+max_income <- max(bd$income)
+bins = 3 
+width=(max_income - min_income)/bins;
+bd$income = cut(bd$income, breaks=seq(min_income, max_income, width))
+
+```
+
+  After discretizing the data, the column containing the number of children a person had was transformed into a nominal category.  Also, the fields that contained "YES" or "NO" were transformed to "variable name = variable name = YES/NO" so that it would be clear in the rules what attribute is related to the YES or NO. Subsequently those and the remaining fields were put into factors as well so the apriori algorithm could work properly.
+
+```{r}
+bd$children=factor(bd$children)
+
+bd$married=dplyr::recode(bd$married, YES="married=YES", NO="married=NO")
+bd$car=dplyr::recode(bd$car, YES="car=YES", NO="car=NO")
+bd$save_act=dplyr::recode(bd$save_act, YES="save_act=YES", NO="save_act=NO")
+bd$current_act=dplyr::recode(bd$current_act, YES="current_act=YES", NO="current_act=NO")
+bd$mortgage=dplyr::recode(bd$mortgage, YES="mortgage=YES", NO="mortgage=NO")
+bd$pep=dplyr::recode(bd$pep, YES="pep=YES", NO="pep=NO")
+str(bd)
+```
+
+##Creating the rules
+  When creating the rules for this analysis, it was important to gather rules that would be useful for the business about their clients and what makes them have or not have a Personal Equity Plan (PEP). Initially, a general overview of the entire dataset was used to create rules to see if any PEP measure was present in the top 30 rules of the data set. These rules were created by the following parameters: support at 0.01, confidence set to 90%, and four as maximum number of items allowed in a rule. Then, a visual graph was produced to **see what items were part ofthe biggest rulesets and get an over view [ RE DO THIS]
+  
+```{r}
+rules<- apriori(bd, parameter = list(supp=0.01, conf=0.9, maxlen = 4))
+rules<- sort(rules, decreasing = FALSE, by ="lift")
+plot(rules, measure = c("support", "lift"), shading = "confidence")
+generalRules30<- head(rules, n = 30, by = "lift")
+inspect(generalRules30)
+```
+
+##LHS = PEP = PEP = YES
+  Affter gathering general rules about the dataset, the right hand side (RHS) was set to either "pep=pep=YES" or "pep=pep=NO" to examine what kind of clients were or were not buying the Personal Equity Plan.  The first set of rules were based on clients that had the PEP and the parameters were set to support at 0.001 and confidence at 90%.  Furthermore, the rules were limited to a maximum of four items per itemset to reduce redundancy with too many items per rule. 
+
+```{r}
+yesrules<- apriori(bd, parameter = list(supp=0.01, conf = 0.9, maxlen = 4), appearance =list(default = "lhs", rhs="pep=pep=YES"),control=list(verbose=F))
+yesrules<- sort(yesrules, decreasing = FALSE , by ="confidence")
+inspect(yesrules[1:20])
+```
+Results of first round: 
+
+[8]  {age=old,                                                                   
+      sex=FEMALE,                                                                
+      income=(4.38e+04,6.31e+04],                                                
+      married=married=NO}          => {pep=pep=YES}   0.015        0.9    2     9
+      
+##visualize
+```{r}
+options(digits = 2)
+plotly_arules(yesrules, measure = c("support", "lift"), shading = "confidence")
+```
+
+##pep = pep = NO
+
+```{r}
+norules<- apriori(bd, parameter = list(supp=0.01, conf = 0.9, maxlen = 4), appearance =list(default = "lhs", rhs="pep=pep=NO"),control=list(verbose=F))
+norules<- sort(norules, decreasing = FALSE, by ="confidence")
+inspect(norules[1:20])
+```
+
+##Visualize
+
+```{r}
+top20no<- head(norules, n = 20, by = "lift")
+plot(top20no, method = "graph", interactive = TRUE)
+```
